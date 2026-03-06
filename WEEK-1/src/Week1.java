@@ -1,59 +1,69 @@
 import java.util.*;
 
+class DNSEntry {
+    String ipAddress;
+    long expiryTime;
+
+    DNSEntry(String ipAddress, long ttl) {
+        this.ipAddress = ipAddress;
+        this.expiryTime = System.currentTimeMillis() + ttl * 1000;
+    }
+
+    boolean isExpired() {
+        return System.currentTimeMillis() > expiryTime;
+    }
+}
+
 public class Week1 {
 
-    private HashMap<String, Integer> stockMap;
-    private LinkedHashMap<Integer, String> waitingList;
+    private HashMap<String, DNSEntry> cache;
+    private int hits = 0;
+    private int misses = 0;
 
     public Week1() {
-        stockMap = new HashMap<>();
-        waitingList = new LinkedHashMap<>();
+        cache = new HashMap<>();
     }
 
-    public void addProduct(String productId, int stock) {
-        stockMap.put(productId, stock);
+    public String resolve(String domain) {
+
+        if (cache.containsKey(domain)) {
+            DNSEntry entry = cache.get(domain);
+
+            if (!entry.isExpired()) {
+                hits++;
+                return "Cache HIT → " + entry.ipAddress;
+            } else {
+                cache.remove(domain);
+            }
+        }
+
+        misses++;
+        String ip = queryUpstreamDNS(domain);
+        cache.put(domain, new DNSEntry(ip, 300));
+        return "Cache MISS → " + ip;
     }
 
-    public String checkStock(String productId) {
-        if (stockMap.containsKey(productId)) {
-            return stockMap.get(productId) + " units available";
-        }
-        return "Product not found";
+    private String queryUpstreamDNS(String domain) {
+        Random r = new Random();
+        return "172.217.14." + (200 + r.nextInt(50));
     }
 
-    public synchronized String purchaseItem(String productId, int userId) {
-
-        if (!stockMap.containsKey(productId)) {
-            return "Product not found";
-        }
-
-        int stock = stockMap.get(productId);
-
-        if (stock > 0) {
-            stockMap.put(productId, stock - 1);
-            return "Success, " + (stock - 1) + " units remaining";
-        }
-        else {
-            waitingList.put(userId, productId);
-            return "Added to waiting list, position #" + waitingList.size();
-        }
+    public String getCacheStats() {
+        int total = hits + misses;
+        double hitRate = total == 0 ? 0 : (hits * 100.0 / total);
+        return "Hit Rate: " + hitRate + "%";
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
-        Week1 system = new Week1();
+        Week1 dns = new Week1();
 
-        system.addProduct("IPHONE15_256GB", 100);
+        System.out.println(dns.resolve("google.com"));
+        System.out.println(dns.resolve("google.com"));
 
-        System.out.println(system.checkStock("IPHONE15_256GB"));
+        Thread.sleep(2000);
 
-        System.out.println(system.purchaseItem("IPHONE15_256GB", 12345));
-        System.out.println(system.purchaseItem("IPHONE15_256GB", 67890));
-
-        for (int i = 0; i < 100; i++) {
-            system.purchaseItem("IPHONE15_256GB", i);
-        }
-
-        System.out.println(system.purchaseItem("IPHONE15_256GB", 99999));
+        System.out.println(dns.resolve("google.com"));
+        System.out.println(dns.getCacheStats());
     }
 }

@@ -1,69 +1,116 @@
+
 import java.util.*;
 
-class DNSEntry {
-    String ipAddress;
-    long expiryTime;
+class Document {
+    String id;
+    String text;
 
-    DNSEntry(String ipAddress, long ttl) {
-        this.ipAddress = ipAddress;
-        this.expiryTime = System.currentTimeMillis() + ttl * 1000;
-    }
-
-    boolean isExpired() {
-        return System.currentTimeMillis() > expiryTime;
+    Document(String id, String text) {
+        this.id = id;
+        this.text = text;
     }
 }
 
 public class Week1 {
 
-    private HashMap<String, DNSEntry> cache;
-    private int hits = 0;
-    private int misses = 0;
+    private int n;
+    private HashMap<String, Set<String>> index;
+    private HashMap<String, Integer> docNgramCount;
 
-    public Week1() {
-        cache = new HashMap<>();
+    public Week1(int n) {
+        this.n = n;
+        index = new HashMap<>();
+        docNgramCount = new HashMap<>();
     }
 
-    public String resolve(String domain) {
+    private List<String> preprocess(String text) {
+        text = text.toLowerCase().replaceAll("[^a-z0-9\\s]", " ");
+        return Arrays.asList(text.trim().split("\\s+"));
+    }
 
-        if (cache.containsKey(domain)) {
-            DNSEntry entry = cache.get(domain);
+    private List<String> generateNgrams(List<String> words) {
+        List<String> ngrams = new ArrayList<>();
 
-            if (!entry.isExpired()) {
-                hits++;
-                return "Cache HIT → " + entry.ipAddress;
-            } else {
-                cache.remove(domain);
+        for (int i = 0; i <= words.size() - n; i++) {
+            StringBuilder sb = new StringBuilder();
+
+            for (int j = 0; j < n; j++) {
+                if (j > 0) sb.append(" ");
+                sb.append(words.get(i + j));
+            }
+
+            ngrams.add(sb.toString());
+        }
+
+        return ngrams;
+    }
+
+    public void addDocument(Document doc) {
+
+        List<String> words = preprocess(doc.text);
+        List<String> ngrams = generateNgrams(words);
+
+        docNgramCount.put(doc.id, ngrams.size());
+
+        for (String ng : ngrams) {
+            index.computeIfAbsent(ng, k -> new HashSet<>()).add(doc.id);
+        }
+    }
+
+    public void analyzeDocument(Document doc) {
+
+        List<String> words = preprocess(doc.text);
+        List<String> ngrams = generateNgrams(words);
+
+        HashMap<String, Integer> matchCount = new HashMap<>();
+
+        for (String ng : ngrams) {
+            if (index.containsKey(ng)) {
+                for (String docId : index.get(ng)) {
+                    matchCount.put(docId, matchCount.getOrDefault(docId, 0) + 1);
+                }
             }
         }
 
-        misses++;
-        String ip = queryUpstreamDNS(domain);
-        cache.put(domain, new DNSEntry(ip, 300));
-        return "Cache MISS → " + ip;
+        System.out.println("Extracted " + ngrams.size() + " n-grams");
+
+        for (Map.Entry<String, Integer> entry : matchCount.entrySet()) {
+
+            String otherDoc = entry.getKey();
+            int matches = entry.getValue();
+
+            double similarity = (matches * 100.0) / ngrams.size();
+
+            System.out.println("Found " + matches + " matching n-grams with \"" + otherDoc + "\"");
+
+            System.out.printf("Similarity: %.1f%% ", similarity);
+
+            if (similarity > 50) {
+                System.out.println("(PLAGIARISM DETECTED)");
+            } else if (similarity > 15) {
+                System.out.println("(suspicious)");
+            } else {
+                System.out.println("(low similarity)");
+            }
+        }
     }
 
-    private String queryUpstreamDNS(String domain) {
-        Random r = new Random();
-        return "172.217.14." + (200 + r.nextInt(50));
-    }
+    public static void main(String[] args) {
 
-    public String getCacheStats() {
-        int total = hits + misses;
-        double hitRate = total == 0 ? 0 : (hits * 100.0 / total);
-        return "Hit Rate: " + hitRate + "%";
-    }
+        Week1 detector = new Week1(5);
 
-    public static void main(String[] args) throws Exception {
+        Document d1 = new Document("essay_089.txt",
+                "Artificial intelligence is transforming modern education systems across the world");
 
-        Week1 dns = new Week1();
+        Document d2 = new Document("essay_092.txt",
+                "Artificial intelligence is transforming modern education and learning systems globally");
 
-        System.out.println(dns.resolve("google.com"));
-        System.out.println(dns.resolve("google.com"));
+        detector.addDocument(d1);
+        detector.addDocument(d2);
 
-        Thread.sleep(2000);
+        Document newEssay = new Document("essay_123.txt",
+                "Artificial intelligence is transforming modern education systems in universities");
 
-        System.out.println(dns.resolve("google.com"));
-        System.out.println(dns.getCacheStats());
+        detector.analyzeDocument(newEssay);
     }
 }

@@ -1,116 +1,85 @@
 
 import java.util.*;
 
-class Document {
-    String id;
-    String text;
+class PageEvent {
+    String url;
+    String userId;
+    String source;
 
-    Document(String id, String text) {
-        this.id = id;
-        this.text = text;
+    PageEvent(String url, String userId, String source) {
+        this.url = url;
+        this.userId = userId;
+        this.source = source;
     }
 }
 
 public class Week1 {
 
-    private int n;
-    private HashMap<String, Set<String>> index;
-    private HashMap<String, Integer> docNgramCount;
+    private HashMap<String, Integer> pageViews;
+    private HashMap<String, HashSet<String>> uniqueVisitors;
+    private HashMap<String, Integer> trafficSources;
 
-    public Week1(int n) {
-        this.n = n;
-        index = new HashMap<>();
-        docNgramCount = new HashMap<>();
+    public Week1() {
+        pageViews = new HashMap<>();
+        uniqueVisitors = new HashMap<>();
+        trafficSources = new HashMap<>();
     }
 
-    private List<String> preprocess(String text) {
-        text = text.toLowerCase().replaceAll("[^a-z0-9\\s]", " ");
-        return Arrays.asList(text.trim().split("\\s+"));
+    public void processEvent(PageEvent event) {
+
+        pageViews.put(event.url, pageViews.getOrDefault(event.url, 0) + 1);
+
+        uniqueVisitors.putIfAbsent(event.url, new HashSet<>());
+        uniqueVisitors.get(event.url).add(event.userId);
+
+        trafficSources.put(event.source, trafficSources.getOrDefault(event.source, 0) + 1);
     }
 
-    private List<String> generateNgrams(List<String> words) {
-        List<String> ngrams = new ArrayList<>();
+    public void getDashboard() {
 
-        for (int i = 0; i <= words.size() - n; i++) {
-            StringBuilder sb = new StringBuilder();
+        PriorityQueue<Map.Entry<String, Integer>> pq =
+                new PriorityQueue<>((a, b) -> b.getValue() - a.getValue());
 
-            for (int j = 0; j < n; j++) {
-                if (j > 0) sb.append(" ");
-                sb.append(words.get(i + j));
-            }
+        pq.addAll(pageViews.entrySet());
 
-            ngrams.add(sb.toString());
+        System.out.println("Top Pages:");
+
+        int rank = 1;
+
+        while (!pq.isEmpty() && rank <= 10) {
+
+            Map.Entry<String, Integer> entry = pq.poll();
+            String page = entry.getKey();
+            int views = entry.getValue();
+            int unique = uniqueVisitors.get(page).size();
+
+            System.out.println(rank + ". " + page + " - " + views + " views (" + unique + " unique)");
+            rank++;
         }
 
-        return ngrams;
-    }
+        System.out.println();
+        System.out.println("Traffic Sources:");
 
-    public void addDocument(Document doc) {
-
-        List<String> words = preprocess(doc.text);
-        List<String> ngrams = generateNgrams(words);
-
-        docNgramCount.put(doc.id, ngrams.size());
-
-        for (String ng : ngrams) {
-            index.computeIfAbsent(ng, k -> new HashSet<>()).add(doc.id);
-        }
-    }
-
-    public void analyzeDocument(Document doc) {
-
-        List<String> words = preprocess(doc.text);
-        List<String> ngrams = generateNgrams(words);
-
-        HashMap<String, Integer> matchCount = new HashMap<>();
-
-        for (String ng : ngrams) {
-            if (index.containsKey(ng)) {
-                for (String docId : index.get(ng)) {
-                    matchCount.put(docId, matchCount.getOrDefault(docId, 0) + 1);
-                }
-            }
-        }
-
-        System.out.println("Extracted " + ngrams.size() + " n-grams");
-
-        for (Map.Entry<String, Integer> entry : matchCount.entrySet()) {
-
-            String otherDoc = entry.getKey();
-            int matches = entry.getValue();
-
-            double similarity = (matches * 100.0) / ngrams.size();
-
-            System.out.println("Found " + matches + " matching n-grams with \"" + otherDoc + "\"");
-
-            System.out.printf("Similarity: %.1f%% ", similarity);
-
-            if (similarity > 50) {
-                System.out.println("(PLAGIARISM DETECTED)");
-            } else if (similarity > 15) {
-                System.out.println("(suspicious)");
-            } else {
-                System.out.println("(low similarity)");
-            }
+        for (Map.Entry<String, Integer> entry : trafficSources.entrySet()) {
+            System.out.println(entry.getKey() + " - " + entry.getValue() + " visits");
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
-        Week1 detector = new Week1(5);
+        Week1 analytics = new Week1();
 
-        Document d1 = new Document("essay_089.txt",
-                "Artificial intelligence is transforming modern education systems across the world");
+        analytics.processEvent(new PageEvent("/article/breaking-news", "user_123", "google"));
+        analytics.processEvent(new PageEvent("/article/breaking-news", "user_456", "facebook"));
+        analytics.processEvent(new PageEvent("/sports/championship", "user_789", "google"));
+        analytics.processEvent(new PageEvent("/sports/championship", "user_111", "direct"));
+        analytics.processEvent(new PageEvent("/sports/championship", "user_222", "google"));
+        analytics.processEvent(new PageEvent("/article/breaking-news", "user_123", "google"));
+        analytics.processEvent(new PageEvent("/tech/ai-future", "user_333", "twitter"));
+        analytics.processEvent(new PageEvent("/tech/ai-future", "user_444", "google"));
 
-        Document d2 = new Document("essay_092.txt",
-                "Artificial intelligence is transforming modern education and learning systems globally");
+        Thread.sleep(5000);
 
-        detector.addDocument(d1);
-        detector.addDocument(d2);
-
-        Document newEssay = new Document("essay_123.txt",
-                "Artificial intelligence is transforming modern education systems in universities");
-
-        detector.analyzeDocument(newEssay);
+        analytics.getDashboard();
     }
 }
